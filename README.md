@@ -13,3 +13,5 @@ adeed in process_node_level at process_core_level as first arg fcorelev_ref
 
 It seems that the remote ray task process_core_level takes as first argument the name of the function it returns
 and also when remote process_code_level calls process_core_level it is given as first arg fcorelev_ref in order to correctly retrieve the big Object
+
+The python script can then be easily adapted to interact with a slurm script that might fix one node per task and then indicate the cores per task and an array of tasks
