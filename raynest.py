@@ -2,48 +2,63 @@ import ray
 import tweetnlp
 
 # Initialize Ray
-ray.init()
+ray.init(address="auto")  # Use address="auto" for a cluster; omit for local testing
 
 # Load TweetNLP model
 model = tweetnlp.load_model("sentiment")
 
-# Define a function for processing a batch of tweets
-def analyze_tweets(tweets):
+# Function to process a small batch of tweets
+def process_subchunk(tweets):
     return [model.sentiment(tweet) for tweet in tweets]
 
-# Wrap the function in Ray
+# Define a Ray task for subchunk processing
 @ray.remote
-def parallel_analyze_tweets(tweets):
-    return analyze_tweets(tweets)
+def process_core_level(subchunk):
+    return process_subchunk(subchunk)
 
-# Example tweets
+# Define a Ray task for node-level chunk processing
+@ray.remote
+def process_node_level(chunk, num_cores):
+    # Split the chunk into subchunks for cores
+    subchunk_size = len(chunk) // num_cores + 1
+    subchunks = [chunk[i:i + subchunk_size] for i in range(0, len(chunk), subchunk_size)]
+    
+    # Parallelize subchunk processing across cores
+    core_futures = [process_core_level.remote(subchunk) for subchunk in subchunks]
+    
+    # Collect and combine results
+    results = ray.get(core_futures)
+    return [res for sublist in results for res in sublist]
+
+# Input tweets
 tweets = [
     "I love this new feature on Twitter!",
     "This app update is terrible.",
     "Neutral feelings about this news.",
     "What a fantastic day to be online!",
-    "Why is this so buggy?"
+    "Why is this so buggy?",
+    "Twitter spaces are pretty cool.",
+    "I miss the old days of the internet.",
+    "This is groundbreaking!",
+    "Not sure how I feel about this feature.",
+    "Amazing news today!",
 ]
 
-# Split tweets into chunks for parallel processing
-def chunkify(lst, n):
-    return [lst[i:i + n] for i in range(0, len(lst), n)]
+# Chunk tweets for node-level parallelism
+num_nodes = 2  # Number of nodes
+num_cores_per_node = 4  # Cores available per node
+chunk_size = len(tweets) // num_nodes + 1
+node_chunks = [tweets[i:i + chunk_size] for i in range(0, len(tweets), chunk_size)]
 
-# Number of cores or workers
-num_workers = 2
-chunk_size = len(tweets) // num_workers + 1
-tweet_chunks = chunkify(tweets, chunk_size)
+# Distribute tasks across nodes
+node_futures = [process_node_level.remote(chunk, num_cores_per_node) for chunk in node_chunks]
 
-# Distribute work across workers
-futures = [parallel_analyze_tweets.remote(chunk) for chunk in tweet_chunks]
-
-# Gather results
-results = ray.get(futures)
+# Gather all results
+final_results = ray.get(node_futures)
 
 # Flatten results
-all_results = [res for sublist in results for res in sublist]
+all_results = [res for sublist in final_results for res in sublist]
 
 # Display results
 for tweet, sentiment in zip(tweets, all_results):
     print(f"Tweet: {tweet}\nSentiment: {sentiment}\n")
-
