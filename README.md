@@ -3,3 +3,13 @@ chatGPT answer to: "tweetnlp with python ray with chunks for nodes and subchunks
 
 After receiving some very good hint from chatGPT answering my above question, I have to add some corrections
 in order to make their python script work
+
+First error : ConnectionError: Could not find any running Ray instance so ray.init(...) replaced with simply ray.init()
+
+After rerunning another error: ValueError: The remote function __main__.process_node_level is too large (476 MiB > FUNCTION_SIZE_ERROR_THRESHOLD=95 MiB)
+added after f process_subchunk : fcorelev_ref = ray.put(process_subchunk) # my modif: store big Object and get an ObjectRef
+added argument in function in process_core_level(
+adeed in process_node_level at process_core_level as first arg fcorelev_ref
+
+It seems that the remote ray task process_core_level takes as first argument the name of the function it returns
+and also when remote process_code_level calls process_core_level it is given as first arg fcorelev_ref in order to correctly retrieve the big Object
