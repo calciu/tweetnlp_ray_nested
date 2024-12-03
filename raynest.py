@@ -2,7 +2,8 @@ import ray
 import tweetnlp
 
 # Initialize Ray
-ray.init(address="auto")  # Use address="auto" for a cluster; omit for local testing
+#ray.init(address="auto")  # Use address="auto" for a cluster; omit for local testing
+ray.init()
 
 # Load TweetNLP model
 model = tweetnlp.load_model("sentiment")
@@ -11,9 +12,11 @@ model = tweetnlp.load_model("sentiment")
 def process_subchunk(tweets):
     return [model.sentiment(tweet) for tweet in tweets]
 
+fcorelev_ref = ray.put(process_subchunk) # my modif: store big Object and get an ObjectRef
+
 # Define a Ray task for subchunk processing
 @ray.remote
-def process_core_level(subchunk):
+def process_core_level(process_subchunk, subchunk): #modif: first arg is the function 
     return process_subchunk(subchunk)
 
 # Define a Ray task for node-level chunk processing
@@ -24,7 +27,7 @@ def process_node_level(chunk, num_cores):
     subchunks = [chunk[i:i + subchunk_size] for i in range(0, len(chunk), subchunk_size)]
     
     # Parallelize subchunk processing across cores
-    core_futures = [process_core_level.remote(subchunk) for subchunk in subchunks]
+    core_futures = [process_core_level.remote(fcorelev_ref, subchunk) for subchunk in subchunks] # modif: use ref to functions big ObjectRef 
     
     # Collect and combine results
     results = ray.get(core_futures)
